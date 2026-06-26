@@ -7293,12 +7293,18 @@ async function loadFromFirestoreREST(token, uid) {
       window.CUSTOMERS=loaded; if(maxId>=window.custSeq)window.custSeq=maxId+1;
       return loaded.length>0;
     } else {
-      var res = await fetch(url+'?pageSize=300', {headers:{'Authorization':'Bearer '+token}});
-      if (!res.ok) return false;
-      var data = await res.json();
-      if (!data.documents||!data.documents.length) return false;
+      // Manager: use runQuery to get ALL customers (bypass per-owner rules)
+      var queryRes = await fetch(baseUrl+':runQuery', {
+        method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({structuredQuery:{from:[{collectionId:'customers'}]}})
+      });
+      if (!queryRes.ok) { console.warn('Manager runQuery failed:',queryRes.status); return false; }
+      var queryData = await queryRes.json();
+      if (!Array.isArray(queryData)) return false;
+      var docs = queryData.filter(function(r){return r.document;}).map(function(r){return r.document;});
+      if (!docs.length) { console.warn('Manager: no customer docs found'); return false; }
       var loaded=[]; var maxId=0;
-      data.documents.forEach(function(d){
+      docs.forEach(function(d){
         var c=fsDocToObj(d); c.fsId=d.name.split('/').pop();
         if(c._localId!=null){c.id=c._localId;if(c._localId>maxId)maxId=c._localId;}
         if(!Array.isArray(c.jobs))c.jobs=[];
@@ -7307,6 +7313,7 @@ async function loadFromFirestoreREST(token, uid) {
         loaded.push(c);
       });
       window.CUSTOMERS=loaded; if(maxId>=window.custSeq)window.custSeq=maxId+1;
+      console.log('Manager loaded',loaded.length,'customers');
       return loaded.length>0;
     }
   } catch(e){console.warn('Firestore REST load error:',e.message);return false;}
@@ -7572,18 +7579,39 @@ window.renderTeamPage = async function() {
   if (pg) pg.classList.add('active');
   var bt = document.getElementById('fb-team-nav'); if(bt) bt.classList.add('active');
   var listEl = document.getElementById('team-member-list');
+  if (!listEl) return;
   listEl.innerHTML='<div style="color:#6B7280;font-size:13px">กำลังโหลด...</div>';
   try {
-    var snap = await fbDb.collection('users').get();
-    var users = snap.docs.map(function(d){return Object.assign({uid:d.id},d.data());});
+    var baseUrl='https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var token = window.FB_ID_TOKEN;
+    if (!token) throw new Error('ไม่มี token กรุณา login ใหม่');
+    var res = await fetch(baseUrl+'/users?pageSize=50', {
+      headers:{'Authorization':'Bearer '+token}
+    });
+    if (!res.ok) throw new Error('โหลดไม่ได้ ('+res.status+')');
+    var data = await res.json();
+    var users = (data.documents||[]).map(function(d){
+      var obj={uid:d.name.split('/').pop()};
+      var fields=d.fields||{};
+      for(var k in fields){
+        var f=fields[k];
+        obj[k]=f.stringValue!==undefined?f.stringValue:f.integerValue!==undefined?f.integerValue:f.booleanValue!==undefined?f.booleanValue:'';
+      }
+      return obj;
+    });
+    if (!users.length) { listEl.innerHTML='<div style="color:#6B7280;font-size:13px">ยังไม่มีสมาชิก</div>'; return; }
+    // นับ customer แต่ละคน
+    var custCount={};
+    (window.CUSTOMERS||[]).forEach(function(c){ var o=c.ownerId||''; custCount[o]=(custCount[o]||0)+1; });
     listEl.innerHTML = users.map(function(u){
       var isMe = window.FB_USER && u.uid===window.FB_USER.uid;
+      var cnt = custCount[u.uid]||0;
       return '<div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #F3F4F6">'
         +'<div style="width:40px;height:40px;border-radius:10px;background:#FFF0EB;color:#D85A30;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center">'+((u.displayName||u.email||'?').charAt(0).toUpperCase())+'</div>'
-        +'<div style="flex:1"><div style="font-weight:700;font-size:14px">'+(u.displayName||'-')+'</div><div style="font-size:12px;color:#6B7280">'+u.email+'</div></div>'
+        +'<div style="flex:1"><div style="font-weight:700;font-size:14px">'+(u.displayName||'-')+(isMe?' <span style="color:#9AA5B4;font-size:12px;font-weight:400">(คุณ)</span>':'')+'</div>'
+        +'<div style="font-size:12px;color:#6B7280">'+u.email+' &nbsp;·&nbsp; '+cnt+' ลูกค้า</div></div>'
         +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+(u.role==='manager'?'#7C3AED':'#D85A30')+';color:#fff">'+u.role+'</span>'
-        +(isMe?'<span style="font-size:12px;color:#9AA5B4">(คุณ)</span>'
-          :'<button data-uid="'+u.uid+'" data-role="'+u.role+'" onclick="fbToggleRole(this.dataset.uid,this.dataset.role)" style="background:#F4F6F8;border:1px solid #E5E7EB;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit">'+(u.role==='sale'?'&#8594; Manager':'&#8594; Sale')+'</button>')
+        +(!isMe?'<button data-uid="'+u.uid+'" data-role="'+u.role+'" onclick="fbToggleRole(this.dataset.uid,this.dataset.role)" style="background:#F4F6F8;border:1px solid #E5E7EB;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit">'+(u.role==='sale'?'&#8594; Manager':'&#8594; Sale')+'</button>':'')
       +'</div>';
     }).join('');
   } catch(e){ listEl.innerHTML='<div style="color:#DC2626;font-size:13px">โหลดไม่ได้: '+e.message+'</div>'; }
@@ -7592,8 +7620,16 @@ window.renderTeamPage = async function() {
 window.fbToggleRole = async function(uid, cur) {
   var nr = cur==='sale'?'manager':'sale';
   if (!confirm('เปลี่ยน role เป็น '+nr+'?')) return;
-  await fbDb.collection('users').doc(uid).update({role:nr});
-  window.renderTeamPage();
+  try {
+    var baseUrl='https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var res = await fetch(baseUrl+'/users/'+uid+'?updateMask.fieldPaths=role', {
+      method:'PATCH',
+      headers:{'Authorization':'Bearer '+window.FB_ID_TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{role:{stringValue:nr}}})
+    });
+    if (!res.ok) throw new Error('อัปเดตไม่สำเร็จ');
+    window.renderTeamPage();
+  } catch(e){ alert('เกิดข้อผิดพลาด: '+e.message); }
 };
 
 window.fbOpenAddUser = function() {
