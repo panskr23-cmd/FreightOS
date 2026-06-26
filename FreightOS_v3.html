@@ -1413,12 +1413,23 @@ function cmDupCheck(val){
   var res=document.getElementById("cm-dup-result"); if(!res)return;
   if(!val||val.length<2){res.innerHTML="";return;}
   var q=val.toLowerCase();
-  var matches=CUSTOMERS.filter(function(c){return (c.company||"").toLowerCase().indexOf(q)>=0;});
+  // รวม local customers + ชื่อจาก Firestore ทั้งหมด
+  var allNames = (window.ALL_COMPANY_NAMES||[]).slice();
+  // เพิ่ม local ที่ยังไม่มีใน allNames
+  CUSTOMERS.forEach(function(c){
+    if(!allNames.find(function(x){return x.company===c.company;}))
+      allNames.push({company:c.company,ownerName:c.ownerName||'',ownerId:c.ownerId||''});
+  });
+  var myUid = window.FB_USER?window.FB_USER.uid:'';
+  var matches = allNames.filter(function(c){return (c.company||"").toLowerCase().indexOf(q)>=0;});
   if(matches.length){
-    var html='<div style="background:#FEF3C7;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400E;font-weight:700">⚠️ พบ '+matches.length+' รายการ: '+matches.slice(0,3).map(function(c){return c.company;}).join(", ")+'</div>';
-    res.innerHTML=html;
+    var preview = matches.slice(0,3).map(function(c){
+      var who = c.ownerId===myUid ? '(ของคุณ)' : (c.ownerName ? '('+c.ownerName+')' : '');
+      return '<b>'+c.company+'</b> <span style="color:#92400E;font-size:10px">'+who+'</span>';
+    }).join(", ");
+    res.innerHTML='<div style="background:#FEF3C7;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400E;font-weight:700">⚠️ พบ '+matches.length+' รายการในทีม: '+preview+'</div>';
   } else {
-    res.innerHTML='<div style="background:#D1FAE5;border-radius:6px;padding:6px 10px;font-size:11px;color:#065F46;font-weight:700">✅ ไม่พบซ้ำ</div>';
+    res.innerHTML='<div style="background:#D1FAE5;border-radius:6px;padding:6px 10px;font-size:11px;color:#065F46;font-weight:700">✅ ไม่พบซ้ำในทั้งทีม</div>';
   }
 }
 
@@ -1786,16 +1797,24 @@ function _simScore(a,b){
 function saveCustomer(){
   var company=document.getElementById("cm-company").value.trim();
   if(!company){showAlert("cm-alert","กรุณาใส่ชื่อบริษัท","err");return;}
-  // Dup check (skip for edit)
+  // Dup check ทั้งทีม (skip for edit)
   if(!editCustId){
     var dupFound=null; var dupScore=0;
+    var myUid2 = window.FB_USER?window.FB_USER.uid:'';
+    // รวม local + Firestore ทั้งหมด
+    var allForDup = (window.ALL_COMPANY_NAMES||[]).slice();
     CUSTOMERS.forEach(function(c){
+      if(!allForDup.find(function(x){return x.company===c.company;}))
+        allForDup.push({company:c.company,ownerName:c.ownerName||'',ownerId:c.ownerId||''});
+    });
+    allForDup.forEach(function(c){
       var sc=_simScore(company,c.company);
       if(sc>=75&&sc>dupScore){ dupScore=sc; dupFound=c; }
     });
     if(dupFound&&!window._dupConfirmed){
       window._dupConfirmed=false;
-      showAlert("cm-alert","⚠️ พบบริษัทที่คล้ายกัน: <b>"+dupFound.company+"</b> ("+dupScore+"% match) — <a href='#' onclick='window._dupConfirmed=true;saveCustomer();return false;' style='color:var(--primary)'>บันทึกต่อ</a> หรือตรวจสอบก่อน","err");
+      var who = dupFound.ownerId===myUid2 ? '(ของคุณ)' : (dupFound.ownerName?'('+dupFound.ownerName+')':'(Sale คนอื่น)');
+      showAlert("cm-alert","⚠️ พบบริษัทที่คล้ายกันในทีม: <b>"+dupFound.company+"</b> "+who+" ("+dupScore+"% match) — <a href='#' onclick='window._dupConfirmed=true;saveCustomer();return false;' style='color:var(--primary)'>บันทึกต่อ</a> หรือตรวจสอบก่อน","err");
       return;
     }
   }
@@ -1809,6 +1828,8 @@ function saveCustomer(){
   } else {d.activities=acts;d.jobs=[];d.createdAt=Date.now();CUSTOMERS.push(Object.assign({id:custSeq++},d));}
   showAlert("cm-alert","บันทึกเรียบร้อย!","ok");
   renderCustomers(); renderDashboard(); saveToStorage();
+  // รีเฟรช company names cache
+  setTimeout(function(){if(typeof loadAllCompanyNames==='function')loadAllCompanyNames();},3000);
   setTimeout(closeCustModal,800);
 }
 
@@ -6990,8 +7011,7 @@ var FB_CONFIG = {
   appId: "1:96693379753:web:ea668d2652f7ddba587fb8"
 };
 if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
-var fbAuth = firebase.auth();
-var fbDb   = firebase.firestore();
+var fbDb   = firebase.firestore(); // REST auth - no fbAuth needed
 window.FB_USER     = null;
 window.FB_USERDATA = null;
 window.FB_USERS_MAP = {};
@@ -7077,96 +7097,318 @@ async function loadFromFirestore() {
 }
 
 // ── Login ──
-window.fbLogin = function() {
-  var email = document.getElementById('fb-email').value.trim();
-  var pass  = document.getElementById('fb-pass').value;
-  var errEl = document.getElementById('fb-login-err');
-  if (!email || !pass) { errEl.textContent='กรอกอีเมลและรหัสผ่าน'; return; }
-  errEl.textContent = 'กำลังเข้าสู่ระบบ...';
-  fbAuth.signInWithEmailAndPassword(email, pass).catch(function(e) {
-    var m = {
-      'auth/wrong-password':'รหัสผ่านไม่ถูกต้อง',
-      'auth/user-not-found':'ไม่พบ account นี้',
-      'auth/invalid-email':'รูปแบบอีเมลไม่ถูกต้อง',
-      'auth/too-many-requests':'พยายามเข้าสู่ระบบบ่อยเกินไป ลองใหม่ภายหลัง',
-      'auth/invalid-credential':'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
-    };
-    errEl.textContent = m[e.code] || e.message;
-  });
-};
+// ── REST API Auth (ทำงานได้จาก file:// ด้วย) ──
+var FB_API_KEY = 'AIzaSyA75jlDn0aZuikPUQnryycLSpf7OVmSY3E';
+var LS_TOKEN_KEY = 'fb_v3_token';
 
-// ── Logout ──
-window.fbLogout = function() {
-  if (!confirm('ออกจากระบบ?')) return;
-  fbAuth.signOut().then(function() {
-    window.CUSTOMERS = []; window.CARDS = [];
-    document.getElementById('app-main').style.display = 'none';
-    document.getElementById('fb-login-overlay').style.display = 'flex';
-    document.getElementById('fb-email').value = '';
-    document.getElementById('fb-pass').value = '';
-    document.getElementById('fb-login-err').textContent = '';
+async function restSignIn(email, password) {
+  var r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key='+FB_API_KEY, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:email, password:password, returnSecureToken:true})
   });
-};
+  var d = await r.json();
+  if (!r.ok) throw {code: d.error&&d.error.message, message: d.error&&d.error.message};
+  return d; // {idToken, refreshToken, localId, email, expiresIn}
+}
 
-// ── Auth state ──
-fbAuth.onAuthStateChanged(async function(user) {
-  if (!user) {
-    document.getElementById('fb-login-overlay').style.display = 'flex';
-    document.getElementById('app-main').style.display = 'none';
-    return;
-  }
-  window.FB_USER = user;
+async function restRefreshToken(refreshToken) {
+  var r = await fetch('https://securetoken.googleapis.com/v1/token?key='+FB_API_KEY, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({grant_type:'refresh_token', refresh_token:refreshToken})
+  });
+  var d = await r.json();
+  if (!r.ok) return null;
+  return {idToken: d.id_token, refreshToken: d.refresh_token, localId: d.user_id};
+}
+
+async function initWithToken(tokenData) {
+  // ตั้ง Firebase Auth user จาก token
+  window.FB_USER = {uid: tokenData.localId, email: tokenData.email||''};
+  // ใช้ credential เพื่อ sign in Firebase SDK (bypass iframe)
+  try {
+    var cred = firebase.auth.GoogleAuthProvider.credential(null, tokenData.idToken);
+  } catch(e){}
+  // Set custom token ให้ Firestore SDK ใช้ผ่าน signInWithCustomToken ไม่ได้ 
+  // → ใช้ REST API สำหรับ Firestore แทน
+  window.FB_ID_TOKEN = tokenData.idToken;
+  window.FB_REFRESH_TOKEN = tokenData.refreshToken;
+  // save to localStorage
+  try { localStorage.setItem(LS_TOKEN_KEY, JSON.stringify({
+    uid: tokenData.localId, email: tokenData.email||'',
+    idToken: tokenData.idToken, refreshToken: tokenData.refreshToken,
+    savedAt: Date.now()
+  })); } catch(e){}
+  await doInitApp();
+}
+
+async function doInitApp() {
   document.getElementById('fb-login-overlay').style.display = 'none';
   document.getElementById('fb-loading-overlay').style.display = 'flex';
   try {
-    // Get user profile
-    var uDoc = await fbDb.collection('users').doc(user.uid).get();
-    if (!uDoc.exists) {
-      window.FB_USERDATA = {displayName: (user.email||'').split('@')[0], role:'sale', email:user.email};
-      await fbDb.collection('users').doc(user.uid).set(Object.assign({createdAt:firebase.firestore.FieldValue.serverTimestamp()}, window.FB_USERDATA));
+    // โหลด user profile ผ่าน Firestore REST API
+    var uid = window.FB_USER.uid;
+    var token = window.FB_ID_TOKEN;
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+
+    // Get user doc
+    var uRes = await fetch(baseUrl+'/users/'+uid, {headers:{'Authorization':'Bearer '+token}});
+    if (uRes.ok) {
+      var uData = await uRes.json();
+      window.FB_USERDATA = fsDocToObj(uData);
     } else {
-      window.FB_USERDATA = uDoc.data();
+      // สร้าง user doc ใหม่
+      window.FB_USERDATA = {displayName:(window.FB_USER.email||'').split('@')[0], role:'sale', email:window.FB_USER.email||''};
+      await fetch(baseUrl+'/users/'+uid, {
+        method:'PATCH', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({fields:objToFsDoc(window.FB_USERDATA).fields})
+      });
     }
-    // Load user list
-    var uSnap = await fbDb.collection('users').get();
-    uSnap.docs.forEach(function(d){ window.FB_USERS_MAP[d.id] = d.data().displayName || d.data().email; });
-    // Update topbar
+
+    // โหลด users list
+    var allUsersRes = await fetch(baseUrl+'/users', {headers:{'Authorization':'Bearer '+token}});
+    if (allUsersRes.ok) {
+      var allUsersData = await allUsersRes.json();
+      (allUsersData.documents||[]).forEach(function(d){
+        var uid2 = d.name.split('/').pop();
+        var u = fsDocToObj(d);
+        window.FB_USERS_MAP[uid2] = u.displayName || u.email || uid2;
+      });
+    }
+
+    // อัปเดต topbar
     var nameEl = document.getElementById('fb-user-name');
     if (nameEl) nameEl.textContent = window.FB_USERDATA.displayName;
     var badge = document.getElementById('fb-role-badge');
     if (badge) { badge.textContent=window.FB_USERDATA.role; badge.className='fb-role-badge '+(window.FB_USERDATA.role==='manager'?'manager':''); }
-    // Show manager tabs
     if (window.FB_USERDATA.role === 'manager') {
       var mn=document.getElementById('fb-manager-nav'); if(mn) mn.style.display='';
       var tn=document.getElementById('fb-team-nav'); if(tn) tn.style.display='';
     }
-    // Load data
-    var fromCloud = await loadFromFirestore();
+
+    // โหลดข้อมูล Firestore ผ่าน REST
+    var fromCloud = await loadFromFirestoreREST(token, uid);
     if (!fromCloud) {
       try {
         var raw = localStorage.getItem('freight101_v3') || localStorage.getItem(window.LS_KEY||'freight101_v2');
         if (raw) { var d=JSON.parse(raw); if(d.CUSTOMERS) window.CUSTOMERS=d.CUSTOMERS; if(d.CARDS) window.CARDS=d.CARDS; if(d.custSeq) window.custSeq=d.custSeq; if(d.cardSeq) window.cardSeq=d.cardSeq; }
       } catch(ex){}
     }
-    // Also update current user's name in the old name display
-    if (window.CURRENT_USER) { window.CURRENT_USER.name = window.FB_USERDATA.displayName; }
-    var nameDisp = document.getElementById('user-name-display');
-    if (nameDisp) nameDisp.textContent = window.FB_USERDATA.displayName;
-    // Init app
+
+    if (window.CURRENT_USER) window.CURRENT_USER.name = window.FB_USERDATA.displayName;
+    var nd = document.getElementById('user-name-display'); if(nd) nd.textContent = window.FB_USERDATA.displayName;
+
     if (typeof loadSheetsUrl==='function') try{loadSheetsUrl();}catch(ex){}
     if (typeof renderDashboard==='function') try{renderDashboard();}catch(ex){}
     if (typeof renderCustomers==='function') try{renderCustomers();}catch(ex){}
     if (typeof loadRates==='function') try{loadRates();}catch(ex){}
     if (typeof addAdvRow==='function') try{addAdvRow();addAdvRow();}catch(ex){}
     if (typeof initNotifications==='function') try{initNotifications();}catch(ex){}
+    // โหลดชื่อบริษัททั้งหมดสำหรับ dup check ข้ามทีม
+    loadAllCompanyNames();
   } catch(err) {
     console.error('Init error:', err);
-    alert('เกิดข้อผิดพลาด: ' + err.message);
+    document.getElementById('fb-loading-overlay').style.display='none';
+    document.getElementById('fb-login-overlay').style.display='flex';
+    document.getElementById('fb-login-err').textContent='เกิดข้อผิดพลาด: '+err.message;
+    return;
   } finally {
     document.getElementById('fb-loading-overlay').style.display = 'none';
     document.getElementById('app-main').style.display = '';
   }
-});
+}
+
+// ── Firestore REST helpers ──
+function fsDocToObj(doc) {
+  var obj = {};
+  var fields = doc.fields || {};
+  for (var k in fields) {
+    var v = fields[k];
+    if (v.stringValue !== undefined) obj[k] = v.stringValue;
+    else if (v.integerValue !== undefined) obj[k] = parseInt(v.integerValue);
+    else if (v.doubleValue !== undefined) obj[k] = v.doubleValue;
+    else if (v.booleanValue !== undefined) obj[k] = v.booleanValue;
+    else if (v.arrayValue) obj[k] = (v.arrayValue.values||[]).map(function(x){return fsValToJs(x);});
+    else if (v.mapValue) obj[k] = fsDocToObj(v.mapValue);
+    else obj[k] = null;
+  }
+  return obj;
+}
+function fsValToJs(v) {
+  if (!v) return null;
+  if (v.stringValue !== undefined) return v.stringValue;
+  if (v.integerValue !== undefined) return parseInt(v.integerValue);
+  if (v.doubleValue !== undefined) return v.doubleValue;
+  if (v.booleanValue !== undefined) return v.booleanValue;
+  if (v.arrayValue) return (v.arrayValue.values||[]).map(function(x){return fsValToJs(x);});
+  if (v.mapValue) return fsDocToObj(v.mapValue);
+  return null;
+}
+function jsToFsVal(v) {
+  if (v === null || v === undefined) return {nullValue:null};
+  if (typeof v === 'string') return {stringValue:v};
+  if (typeof v === 'boolean') return {booleanValue:v};
+  if (typeof v === 'number') return Number.isInteger(v)?{integerValue:String(v)}:{doubleValue:v};
+  if (Array.isArray(v)) return {arrayValue:{values:v.map(jsToFsVal)}};
+  if (typeof v === 'object') {
+    var fields={};
+    for(var k in v){ if(typeof v[k]!=='function') fields[k]=jsToFsVal(v[k]); }
+    return {mapValue:{fields:fields}};
+  }
+  return {stringValue:String(v)};
+}
+function objToFsDoc(obj) {
+  var fields={};
+  for(var k in obj){ if(typeof obj[k]!=='function') fields[k]=jsToFsVal(obj[k]); }
+  return {fields:fields};
+}
+
+async function loadFromFirestoreREST(token, uid) {
+  try {
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var url = baseUrl+'/customers';
+    // sale: filter by ownerId; manager: get all
+    if (window.FB_USERDATA && window.FB_USERDATA.role === 'sale') {
+      // Use runQuery with filter
+      var queryRes = await fetch(baseUrl+':runQuery', {
+        method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({structuredQuery:{
+          from:[{collectionId:'customers'}],
+          where:{fieldFilter:{field:{fieldPath:'ownerId'},op:'EQUAL',value:{stringValue:uid}}}
+        }})
+      });
+      if (!queryRes.ok) return false;
+      var queryData = await queryRes.json();
+      if (!Array.isArray(queryData)) return false;
+      var docs = queryData.filter(function(r){return r.document;}).map(function(r){return r.document;});
+      if (!docs.length) return false;
+      var loaded=[]; var maxId=0;
+      docs.forEach(function(d){
+        var c=fsDocToObj(d); c.fsId=d.name.split('/').pop();
+        if(c._localId!=null){c.id=c._localId;if(c._localId>maxId)maxId=c._localId;}
+        if(!Array.isArray(c.jobs))c.jobs=[];
+        if(!Array.isArray(c.activities))c.activities=[];
+        if(!Array.isArray(c.qoHistory))c.qoHistory=[];
+        loaded.push(c);
+      });
+      window.CUSTOMERS=loaded; if(maxId>=window.custSeq)window.custSeq=maxId+1;
+      return loaded.length>0;
+    } else {
+      var res = await fetch(url+'?pageSize=300', {headers:{'Authorization':'Bearer '+token}});
+      if (!res.ok) return false;
+      var data = await res.json();
+      if (!data.documents||!data.documents.length) return false;
+      var loaded=[]; var maxId=0;
+      data.documents.forEach(function(d){
+        var c=fsDocToObj(d); c.fsId=d.name.split('/').pop();
+        if(c._localId!=null){c.id=c._localId;if(c._localId>maxId)maxId=c._localId;}
+        if(!Array.isArray(c.jobs))c.jobs=[];
+        if(!Array.isArray(c.activities))c.activities=[];
+        if(!Array.isArray(c.qoHistory))c.qoHistory=[];
+        loaded.push(c);
+      });
+      window.CUSTOMERS=loaded; if(maxId>=window.custSeq)window.custSeq=maxId+1;
+      return loaded.length>0;
+    }
+  } catch(e){console.warn('Firestore REST load error:',e.message);return false;}
+}
+
+// ── Override pushToFirestore ใช้ REST แทน SDK ──
+pushToFirestore = async function() {
+  if (!window.FB_USER || !window.FB_ID_TOKEN || !CUSTOMERS.length) return;
+  var token = window.FB_ID_TOKEN;
+  var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+  var uid = window.FB_USER.uid;
+  try {
+    var promises = CUSTOMERS.map(function(c) {
+      if (!c.fsId) c.fsId = 'cust_'+c.id+'_'+uid;
+      var doc = {};
+      for(var k in c){ if(typeof c[k]!=='function' && c[k]!==undefined) doc[k]=c[k]; }
+      doc.ownerId = c.ownerId || uid;
+      doc.ownerName = c.ownerName || (window.FB_USERDATA&&window.FB_USERDATA.displayName)||'';
+      doc._localId = c.id;
+      return fetch(baseUrl+'/customers/'+c.fsId, {
+        method:'PATCH', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify(objToFsDoc(doc))
+      });
+    });
+    await Promise.all(promises.slice(0,20)); // save up to 20 at a time
+    var ind=document.getElementById('save-indicator')||document.getElementById('topbar-save-status');
+    if(ind){var n=new Date();ind.textContent='Cloud '+n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');}
+  } catch(e){console.warn('REST save error:',e.message);}
+};
+
+window.fbLogin = async function() {
+  var email = document.getElementById('fb-email').value.trim();
+  var pass  = document.getElementById('fb-pass').value;
+  var errEl = document.getElementById('fb-login-err');
+  if (!email || !pass) { errEl.textContent='กรอกอีเมลและรหัสผ่าน'; return; }
+  errEl.textContent = 'กำลังเข้าสู่ระบบ...';
+  try {
+    var tokenData = await restSignIn(email, pass);
+    tokenData.email = tokenData.email || email;
+    await initWithToken(tokenData);
+  } catch(e) {
+    var m = {
+      'EMAIL_NOT_FOUND':'ไม่พบ account นี้',
+      'INVALID_PASSWORD':'รหัสผ่านไม่ถูกต้อง',
+      'INVALID_EMAIL':'รูปแบบอีเมลไม่ถูกต้อง',
+      'TOO_MANY_ATTEMPTS_TRY_LATER':'ลองใหม่ภายหลัง',
+      'INVALID_LOGIN_CREDENTIALS':'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+      'USER_DISABLED':'account ถูกระงับ'
+    };
+    errEl.textContent = m[e.code] || m[e.message] || 'Login ไม่สำเร็จ: '+(e.message||'');
+  }
+};
+
+window.fbLogout = function() {
+  if (!confirm('ออกจากระบบ?')) return;
+  try { localStorage.removeItem(LS_TOKEN_KEY); } catch(ex){}
+  window.FB_USER=null; window.FB_USERDATA=null; window.FB_ID_TOKEN=null;
+  window.CUSTOMERS=[]; window.CARDS=[];
+  document.getElementById('app-main').style.display='none';
+  document.getElementById('fb-login-overlay').style.display='flex';
+  document.getElementById('fb-email').value='';
+  document.getElementById('fb-pass').value='';
+  document.getElementById('fb-login-err').textContent='';
+  // Reset manager tabs
+  var mn=document.getElementById('fb-manager-nav'); if(mn) mn.style.display='none';
+  var tn=document.getElementById('fb-team-nav'); if(tn) tn.style.display='none';
+};
+
+// ── Auto login จาก saved token ──
+(async function() {
+  try {
+    var saved = JSON.parse(localStorage.getItem(LS_TOKEN_KEY)||'null');
+    if (!saved) {
+      document.getElementById('fb-login-overlay').style.display='flex';
+      document.getElementById('fb-loading-overlay').style.display='none';
+      return;
+    }
+    // Refresh token ถ้าเกิน 50 นาที
+    var age = (Date.now()-(saved.savedAt||0))/1000/60;
+    var tokenData = saved;
+    if (age > 50 && saved.refreshToken) {
+      var refreshed = await restRefreshToken(saved.refreshToken);
+      if (refreshed) {
+        tokenData = Object.assign({}, saved, refreshed);
+        tokenData.savedAt = Date.now();
+      } else {
+        localStorage.removeItem(LS_TOKEN_KEY);
+        document.getElementById('fb-login-overlay').style.display='flex';
+        document.getElementById('fb-loading-overlay').style.display='none';
+        return;
+      }
+    }
+    window.FB_USER = {uid: tokenData.uid||tokenData.localId, email: tokenData.email||''};
+    window.FB_ID_TOKEN = tokenData.idToken;
+    window.FB_REFRESH_TOKEN = tokenData.refreshToken;
+    await doInitApp();
+  } catch(e) {
+    console.warn('Auto login error:', e);
+    document.getElementById('fb-login-overlay').style.display='flex';
+    document.getElementById('fb-loading-overlay').style.display='none';
+  }
+})();
 
 // ── Add ownerId when creating new customer ──
 (function() {
@@ -7368,20 +7610,68 @@ window.fbSaveNewUser = async function() {
   var role=document.getElementById('aum-role').value;
   var errEl=document.getElementById('aum-err');
   if(!name||!email||!pass){errEl.textContent='กรอกข้อมูลให้ครบ';return;}
+  if(pass.length<6){errEl.textContent='รหัสผ่านต้องมีอย่างน้อย 6 ตัว';return;}
+  errEl.textContent='กำลังสร้าง...';
   try {
-    var FB_CONFIG2 = {apiKey:"AIzaSyA75jlDn0aZuikPUQnryycLSpf7OVmSY3E",authDomain:"freightos-7d4c4.firebaseapp.com",projectId:"freightos-7d4c4",storageBucket:"freightos-7d4c4.firebasestorage.app",messagingSenderId:"96693379753",appId:"1:96693379753:web:ea668d2652f7ddba587fb8"};
-    var app2 = firebase.apps.find(function(a){return a.name==='second';}) || firebase.initializeApp(FB_CONFIG2,'second');
-    var cred = await app2.auth().createUserWithEmailAndPassword(email,pass);
-    await fbDb.collection('users').doc(cred.user.uid).set({
-      displayName:name,email:email,role:role,
-      createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    // ใช้ Firebase Auth REST API สร้าง user ใหม่
+    var signupRes = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_API_KEY,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:email,password:pass,returnSecureToken:true})
     });
-    await app2.auth().signOut();
+    var signupData = await signupRes.json();
+    if(!signupRes.ok) throw new Error(signupData.error&&signupData.error.message||'สร้างไม่สำเร็จ');
+    var newUid = signupData.localId;
+    var newToken = signupData.idToken;
+    // สร้าง Firestore doc ด้วย token ของ user ใหม่
+    var baseUrl='https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    await fetch(baseUrl+'/users/'+newUid,{
+      method:'PATCH',headers:{'Authorization':'Bearer '+newToken,'Content-Type':'application/json'},
+      body:JSON.stringify({fields:{
+        displayName:{stringValue:name},email:{stringValue:email},
+        role:{stringValue:role},createdAt:{stringValue:new Date().toISOString()}
+      }})
+    });
     document.getElementById('fb-add-user-modal').style.display='none';
+    errEl.textContent='';
     window.renderTeamPage();
     alert('✅ สร้าง account '+name+' สำเร็จ!');
-  } catch(e){ errEl.textContent=e.message; }
+  } catch(e){ errEl.textContent=e.message||String(e); }
 };
+
+
+// ── Global company name cache (all users) for dup check ──
+window.ALL_COMPANY_NAMES = []; // [{company, ownerName, ownerId}]
+
+async function loadAllCompanyNames() {
+  if (!window.FB_ID_TOKEN) return;
+  try {
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    // Use runQuery to get only company + ownerName fields (lightweight)
+    var queryRes = await fetch(baseUrl + ':runQuery', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+window.FB_ID_TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({structuredQuery:{
+        from:[{collectionId:'customers'}],
+        select:{fields:[
+          {fieldPath:'company'},{fieldPath:'ownerName'},{fieldPath:'ownerId'}
+        ]}
+      }})
+    });
+    if (!queryRes.ok) return;
+    var rows = await queryRes.json();
+    if (!Array.isArray(rows)) return;
+    window.ALL_COMPANY_NAMES = rows
+      .filter(function(r){return r.document;})
+      .map(function(r){
+        var f = r.document.fields||{};
+        return {
+          company:   (f.company&&f.company.stringValue)||'',
+          ownerName: (f.ownerName&&f.ownerName.stringValue)||'',
+          ownerId:   (f.ownerId&&f.ownerId.stringValue)||''
+        };
+      }).filter(function(x){return x.company;});
+  } catch(e){ console.warn('loadAllCompanyNames error:',e.message); }
+}
 
 // ── Periodic cloud sync every 60s ──
 setInterval(function(){ if(window.FB_USER && window.CUSTOMERS && window.CUSTOMERS.length) scheduleFirestoreSave(); }, 60000);
