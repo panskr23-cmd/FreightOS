@@ -7203,6 +7203,11 @@ async function doInitApp() {
     if (window.CURRENT_USER) window.CURRENT_USER.name = window.FB_USERDATA.displayName;
     var nd = document.getElementById('user-name-display'); if(nd) nd.textContent = window.FB_USERDATA.displayName;
 
+    // Manager nav buttons — แสดงอีกครั้งหลัง data load เพื่อ safety
+    if (window.FB_USERDATA && window.FB_USERDATA.role === 'manager') {
+      var _mn=document.getElementById('fb-manager-nav'); if(_mn) _mn.style.display='';
+      var _tn=document.getElementById('fb-team-nav'); if(_tn) _tn.style.display='';
+    }
     if (typeof loadSheetsUrl==='function') try{loadSheetsUrl();}catch(ex){}
     if (typeof renderDashboard==='function') try{renderDashboard();}catch(ex){}
     if (typeof renderCustomers==='function') try{renderCustomers();}catch(ex){}
@@ -7211,6 +7216,10 @@ async function doInitApp() {
     if (typeof initNotifications==='function') try{initNotifications();}catch(ex){}
     // โหลดชื่อบริษัททั้งหมดสำหรับ dup check ข้ามทีม
     loadAllCompanyNames();
+    // Manager → เปิดหน้า Manager Dashboard อัตโนมัติหลัง login
+    if (window.FB_USERDATA && window.FB_USERDATA.role === 'manager') {
+      setTimeout(function(){ if(typeof renderManagerDashboard==='function') renderManagerDashboard(); }, 100);
+    }
   } catch(err) {
     console.error('Init error:', err);
     document.getElementById('fb-loading-overlay').style.display='none';
