@@ -7209,16 +7209,16 @@ async function doInitApp() {
       var _tn=document.getElementById('fb-team-nav'); if(_tn) _tn.style.display='';
     }
     if (typeof loadSheetsUrl==='function') try{loadSheetsUrl();}catch(ex){}
-    if (typeof renderDashboard==='function') try{renderDashboard();}catch(ex){}
     if (typeof renderCustomers==='function') try{renderCustomers();}catch(ex){}
     if (typeof loadRates==='function') try{loadRates();}catch(ex){}
     if (typeof addAdvRow==='function') try{addAdvRow();addAdvRow();}catch(ex){}
     if (typeof initNotifications==='function') try{initNotifications();}catch(ex){}
-    // โหลดชื่อบริษัททั้งหมดสำหรับ dup check ข้ามทีม
     loadAllCompanyNames();
-    // Manager → เปิดหน้า Manager Dashboard อัตโนมัติ (หลัง render ทุกอย่างเสร็จ)
+    // Manager → ข้าม Dashboard ไปหน้าทีมเลย
     if (window.FB_USERDATA && window.FB_USERDATA.role === 'manager') {
       if (typeof renderManagerDashboard === 'function') renderManagerDashboard();
+    } else {
+      if (typeof renderDashboard==='function') try{renderDashboard();}catch(ex){}
     }
   } catch(err) {
     console.error('Init error:', err);
