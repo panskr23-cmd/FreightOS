@@ -6924,27 +6924,6 @@ function renderManagerPage(){
 </div>
 
 
-</div><!-- end app-main -->
-
-<!-- Delete Customer Confirm Modal -->
-<div id="del-cust-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.35);align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:14px;padding:24px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15)">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-      <div style="width:40px;height:40px;border-radius:10px;background:#FEE2E2;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🗑</div>
-      <div>
-        <div style="font-size:14px;font-weight:700;color:#1A1D23">ลบลูกค้า?</div>
-        <div id="del-cust-name" style="font-size:12px;color:#9AA5B4;margin-top:2px"></div>
-      </div>
-    </div>
-    <div style="font-size:12px;color:#4A5568;background:#FEF2F2;border:0.5px solid #FCA5A5;border-radius:8px;padding:10px 12px;margin-bottom:16px">
-      ข้อมูลทั้งหมดของลูกค้านี้จะถูกลบถาวร รวมถึง Activity, Jobs และ QO ทั้งหมด
-    </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="document.getElementById('del-cust-modal').style.display='none'" style="flex:1;padding:9px;background:#F4F6F8;border:0.5px solid #e2e5ea;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#4A5568">ยกเลิก</button>
-      <button id="del-cust-confirm-btn" style="flex:1;padding:9px;background:#DC2626;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff">ลบถาวร</button>
-    </div>
-  </div>
-</div>
 
 <!-- ═══ MANAGER DASHBOARD PAGE ═══ -->
 <div id="page-manager" class="page">
@@ -6999,6 +6978,28 @@ function renderManagerPage(){
     <div style="display:flex;gap:8px;margin-top:16px">
       <button onclick="document.getElementById('fb-add-user-modal').style.display='none'" style="flex:1;padding:9px;background:#F4F6F8;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
       <button onclick="fbSaveNewUser()" style="flex:1;padding:9px;background:#D85A30;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">สร้าง Account</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end app-main -->
+
+<!-- Delete Customer Confirm Modal -->
+<div id="del-cust-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.35);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:24px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <div style="width:40px;height:40px;border-radius:10px;background:#FEE2E2;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🗑</div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#1A1D23">ลบลูกค้า?</div>
+        <div id="del-cust-name" style="font-size:12px;color:#9AA5B4;margin-top:2px"></div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#4A5568;background:#FEF2F2;border:0.5px solid #FCA5A5;border-radius:8px;padding:10px 12px;margin-bottom:16px">
+      ข้อมูลทั้งหมดของลูกค้านี้จะถูกลบถาวร รวมถึง Activity, Jobs และ QO ทั้งหมด
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('del-cust-modal').style.display='none'" style="flex:1;padding:9px;background:#F4F6F8;border:0.5px solid #e2e5ea;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:#4A5568">ยกเลิก</button>
+      <button id="del-cust-confirm-btn" style="flex:1;padding:9px;background:#DC2626;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff">ลบถาวร</button>
     </div>
   </div>
 </div>
