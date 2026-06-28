@@ -7129,6 +7129,36 @@ async function loadFromFirestore() {
   }
 }
 
+// ── Load all company names for dup check ──
+async function loadAllCompanyNames() {
+  try {
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var token = window.FB_ID_TOKEN;
+    if (!token) return;
+    var res = await fetch(baseUrl+':runQuery', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify({structuredQuery:{
+        from:[{collectionId:'customers'}],
+        select:{fields:[{fieldPath:'company'},{fieldPath:'ownerId'},{fieldPath:'ownerName'}]}
+      }})
+    });
+    var rows = await res.json();
+    window.ALL_COMPANY_NAMES = (rows||[])
+      .filter(function(r){return r.document;})
+      .map(function(r){
+        var f = r.document.fields||{};
+        return {
+          company:   (f.company   && f.company.stringValue)   || '',
+          ownerId:   (f.ownerId   && f.ownerId.stringValue)   || '',
+          ownerName: (f.ownerName && f.ownerName.stringValue) || ''
+        };
+      })
+      .filter(function(x){return x.company;});
+    console.log('ALL_COMPANY_NAMES loaded:', window.ALL_COMPANY_NAMES.length);
+  } catch(e) { console.warn('loadAllCompanyNames error:', e); }
+}
+
 // ── Login ──
 // ── REST API Auth (ทำงานได้จาก file:// ด้วย) ──
 var FB_API_KEY = 'AIzaSyA75jlDn0aZuikPUQnryycLSpf7OVmSY3E';
@@ -7247,7 +7277,7 @@ async function doInitApp() {
     if (typeof loadRates==='function') try{loadRates();}catch(ex){}
     if (typeof addAdvRow==='function') try{addAdvRow();addAdvRow();}catch(ex){}
     if (typeof initNotifications==='function') try{initNotifications();}catch(ex){}
-    loadAllCompanyNames();
+    if (typeof loadAllCompanyNames==='function') loadAllCompanyNames();
     // Manager → ข้าม Dashboard ไปหน้าทีมเลย
     if (window.FB_USERDATA && window.FB_USERDATA.role === 'manager') {
       if (typeof renderManagerDashboard === 'function') renderManagerDashboard();
