@@ -7130,7 +7130,7 @@ async function loadFromFirestore() {
 }
 
 // ── Load all company names for dup check ──
-async function loadAllCompanyNames() {
+window.loadAllCompanyNames = async function() {
   try {
     var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
     var token = window.FB_ID_TOKEN;
