@@ -7523,8 +7523,10 @@ window.renderManagerDashboard = function() {
   function kpi(icon,label,val,sub,bg,tc,drillType){
     var dark=bg&&bg!=='#fff';
     var clickStyle = drillType ? 'cursor:pointer;' : '';
-    var clickAttr  = drillType ? ' onclick="mgrOpenKpiDetail(''+drillType+'')"' : '';
-    var hoverStyle = drillType ? ' onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(0,0,0,.14)'" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 4px rgba(0,0,0,.08)'"' : '';
+    var clickAttr  = drillType ? ' onclick="mgrOpenKpiDetail(\'' + drillType + '\')"' : '';
+    var hoverStyle = drillType
+      ? ' onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 6px 18px rgba(0,0,0,.14)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 1px 4px rgba(0,0,0,.08)\'"'
+      : '';
     return '<div'+clickAttr+hoverStyle+' style="background:'+(bg||'#fff')+';border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.08);'+clickStyle+'transition:transform .15s,box-shadow .15s;position:relative">'
       +(drillType?'<div style="position:absolute;top:10px;right:12px;font-size:9px;color:'+(dark?'rgba(255,255,255,.6)':'#9AA5B4')+';letter-spacing:.3px">คลิกเพื่อดู ›</div>':'')
       +'<div style="font-size:18px;margin-bottom:6px">'+icon+'</div>'
