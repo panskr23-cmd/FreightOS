@@ -361,6 +361,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <span id="topbar-save-status" style="font-size:11px;color:var(--text3)"></span>
     </div>
     <button class="topnav-tab" id="fb-manager-nav" onclick="showPage('manager')" style="display:none"><span>&#128202;</span>ทีม</button>
+    <button class="topnav-tab" id="fb-mgr-dash-nav" onclick="showPage('mgr-dash')" style="display:none"><span>&#128203;</span>Dashboard</button>
     <button class="topnav-tab" id="fb-team-nav" onclick="showPage('team')" style="display:none"><span>&#128101;</span>จัดการทีม</button>
     <div class="fb-user-bar">
       <span id="fb-user-name" style="font-size:13px;font-weight:600;color:#1A1D23"></span>
@@ -7159,6 +7160,33 @@ function renderManagerPage(){
   </div>
 </div>
 
+
+<!-- ═══ MANAGER SALE DASHBOARD PAGE ═══ -->
+<div id="page-mgr-cust" class="page">
+  <div style="max-width:960px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+      <h1 style="font-size:20px;font-weight:800;margin:0;color:var(--text)">&#128203; Dashboard ลูกค้า</h1>
+      <select id="mgr-sale-picker" onchange="renderManagerSaleDashboard(this.value)" style="padding:7px 12px;border:1px solid var(--border2);border-radius:8px;font-size:13px;font-family:inherit;color:var(--text);background:var(--bg);cursor:pointer">
+        <option value="">-- เลือก Sale --</option>
+      </select>
+    </div>
+    <div id="mgr-cust-kpi" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">⏰ Follow-Up วันนี้</div>
+        <div id="mgr-cust-fu" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto"></div>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">📦 Jobs กำลังดำเนินการ</div>
+        <div id="mgr-cust-jobs" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">👤 รายชื่อลูกค้า</div>
+      <div id="mgr-cust-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
+</div>
 </div><!-- end app-main -->
 
 <!-- Delete Customer Confirm Modal -->
@@ -7396,6 +7424,7 @@ async function doInitApp() {
     if (badge) { badge.textContent=window.FB_USERDATA.role; badge.className='fb-role-badge '+(window.FB_USERDATA.role==='manager'?'manager':''); }
     if (window.FB_USERDATA.role === 'manager') {
       var mn=document.getElementById('fb-manager-nav'); if(mn) mn.style.display='';
+      var md=document.getElementById('fb-mgr-dash-nav'); if(md) md.style.display='';
       var tn=document.getElementById('fb-team-nav'); if(tn) tn.style.display='';
     }
 
@@ -7414,6 +7443,7 @@ async function doInitApp() {
     // Manager: ซ่อน nav ปกติ เหลือแค่ ทีม + จัดการทีม
     if (window.FB_USERDATA && window.FB_USERDATA.role === 'manager') {
       var _mn=document.getElementById('fb-manager-nav'); if(_mn) _mn.style.display='';
+      var _md=document.getElementById('fb-mgr-dash-nav'); if(_md) _md.style.display='';
       var _tn=document.getElementById('fb-team-nav'); if(_tn) _tn.style.display='';
       // ซ่อน nav tabs ปกติที่ sale ใช้
       ['nav-dashboard','nav-customers','nav-quotation','nav-profit','nav-trade','nav-board','nav-settings'].forEach(function(id){
@@ -7609,6 +7639,7 @@ window.fbLogout = function() {
   document.getElementById('fb-login-err').textContent='';
   // Reset manager tabs
   var mn=document.getElementById('fb-manager-nav'); if(mn) mn.style.display='none';
+  var md=document.getElementById('fb-mgr-dash-nav'); if(md) md.style.display='none';
   var tn=document.getElementById('fb-team-nav'); if(tn) tn.style.display='none';
 };
 
@@ -7673,6 +7704,10 @@ window.fbLogout = function() {
     if (id === 'manager') {
       if (!isManager) { alert('หน้านี้สำหรับ Manager เท่านั้น'); return; }
       renderManagerDashboard(); return;
+    }
+    if (id === 'mgr-dash') {
+      if (!isManager) { alert('หน้านี้สำหรับ Manager เท่านั้น'); return; }
+      renderManagerSaleDashboard(); return;
     }
     if (id === 'team') {
       if (!isManager) { alert('หน้านี้สำหรับ Manager เท่านั้น'); return; }
@@ -8373,6 +8408,94 @@ window.fbUpdateUser = async function(uid) {
   } catch(e) {
     if(errEl) errEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
     if(saveBtn) saveBtn.textContent = 'บันทึก';
+  }
+};
+
+
+window.renderManagerSaleDashboard = function(selectedOwnerId) {
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.topnav-tab').forEach(function(b){b.classList.remove('active');});
+  var pg = document.getElementById('page-mgr-cust');
+  if (pg) pg.classList.add('active');
+  var bn = document.getElementById('fb-mgr-dash-nav');
+  if (bn) bn.classList.add('active');
+
+  var allC = window.CUSTOMERS || [];
+
+  // Populate sale picker
+  var picker = document.getElementById('mgr-sale-picker');
+  if (picker) {
+    var seenIds = {}; var sales = [];
+    allC.forEach(function(c){ if(c.ownerId && !seenIds[c.ownerId]){ seenIds[c.ownerId]=true; sales.push({id:c.ownerId,name:c.ownerName||c.ownerId}); } });
+    sales.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    picker.innerHTML = '<option value="">-- ทั้งทีม --</option>' + sales.map(function(s){ return '<option value="'+s.id+'"'+(s.id===selectedOwnerId?' selected':'')+'>'+s.name+'</option>'; }).join('');
+    if (selectedOwnerId !== undefined) picker.value = selectedOwnerId || '';
+  }
+
+  var viewC = selectedOwnerId ? allC.filter(function(c){return c.ownerId===selectedOwnerId;}) : allC;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var statusBg = {HOT:'#FEE2E2',WARM:'#FEF3C7',COOL:'#EFF6FF',COLD:'#F1F5F9'};
+  var statusTx = {HOT:'#991B1B',WARM:'#92400E',COOL:'#1E40AF',COLD:'#475569'};
+
+  // KPI
+  var kpiEl = document.getElementById('mgr-cust-kpi');
+  if (kpiEl) {
+    var allJobs=[]; viewC.forEach(function(c){(c.jobs||[]).forEach(function(j){allJobs.push({j:j,c:c});});});
+    var activeJobs=allJobs.filter(function(x){return x.j.stage!=='DELIVERED'&&x.j.stage!=='CANCELLED';});
+    var fuCount=viewC.filter(function(c){if(!c.nextfu)return false;var d=new Date(c.nextfu);d.setHours(0,0,0,0);return d<=today;}).length;
+    function kpi(label,val,col){return '<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px 14px"><div style="font-size:11px;color:var(--text2);margin-bottom:4px">'+label+'</div><div style="font-size:22px;font-weight:800;color:'+(col||'var(--text)')+'">'+val+'</div></div>';}
+    kpiEl.innerHTML = kpi('ลูกค้า',viewC.length) + kpi('HOT 🔥',viewC.filter(function(c){return c.status==='HOT';}).length,'#991B1B') + kpi('FU วันนี้ ⏰',fuCount,'#B45309') + kpi('Jobs 📦',activeJobs.length,'#1E40AF');
+  }
+
+  // Follow Up Today
+  var fuEl = document.getElementById('mgr-cust-fu');
+  if (fuEl) {
+    var fuList = viewC.filter(function(c){if(!c.nextfu)return false;var d=new Date(c.nextfu);d.setHours(0,0,0,0);return d<=today;});
+    if (!fuList.length) { fuEl.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px">ไม่มี follow-up วันนี้ 👌</div>'; }
+    else { fuEl.innerHTML = fuList.slice(0,8).map(function(c){
+      var overdue = new Date(c.nextfu)<today;
+      return '<div style="background:'+(overdue?'#FEE2E2':'#FEF3C7')+';border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center">'
+        +'<div><div style="font-size:12px;font-weight:700;color:var(--text)">'+c.name+'</div>'
+        +(c.ownerName&&!selectedOwnerId?'<div style="font-size:10px;color:var(--text2)">'+c.ownerName+'</div>':'')+'</div>'
+        +'<span style="font-size:10px;font-weight:600;background:'+(overdue?'#DC2626':'#D97706')+';color:#fff;padding:2px 6px;border-radius:10px">'+(overdue?'เลย!':'วันนี้')+'</span>'
+        +'</div>';
+    }).join(''); }
+  }
+
+  // Active Jobs
+  var jobEl = document.getElementById('mgr-cust-jobs');
+  if (jobEl) {
+    var ajobs=[]; viewC.forEach(function(c){(c.jobs||[]).forEach(function(j){if(j.stage!=='DELIVERED'&&j.stage!=='CANCELLED')ajobs.push({j:j,c:c});});});
+    if (!ajobs.length) { jobEl.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px">ไม่มี active jobs</div>'; }
+    else { jobEl.innerHTML = ajobs.slice(0,8).map(function(x){
+      var stageBg={INQUIRY:'#EDE9FE',QUOTED:'#EFF6FF',NEGOTIATION:'#FEF3C7',BOOKED:'#DCFCE7',SHIPPED:'#E0F2FE'};
+      var stageTx={INQUIRY:'#5B21B6',QUOTED:'#1E40AF',NEGOTIATION:'#92400E',BOOKED:'#166534',SHIPPED:'#0369A1'};
+      var s=x.j.stage||'INQUIRY';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg2);border-radius:8px">'
+        +'<div><div style="font-size:12px;font-weight:700;color:var(--text)">'+x.c.name+'</div>'
+        +'<div style="font-size:10px;color:var(--text2)">'+(x.j.route||x.j.jobType||'')+'</div></div>'
+        +'<span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;background:'+(stageBg[s]||'#F1F5F9')+';color:'+(stageTx[s]||'#475569')+'">'+s+'</span>'
+        +'</div>';
+    }).join(''); }
+  }
+
+  // Customer List
+  var listEl = document.getElementById('mgr-cust-list');
+  if (listEl) {
+    if (!viewC.length) { listEl.innerHTML='<div style="font-size:12px;color:var(--text2);padding:8px">ยังไม่มีลูกค้า</div>'; return; }
+    listEl.innerHTML = viewC.map(function(c){
+      var st=c.status||'COOL'; var jobs=(c.jobs||[]).filter(function(j){return j.stage!=='DELIVERED'&&j.stage!=='CANCELLED';}).length;
+      var fuStr=''; if(c.nextfu){var d=new Date(c.nextfu);fuStr=d.toLocaleDateString('th-TH',{day:'numeric',month:'short'});}
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:var(--bg2)">'
+        +'<div style="width:34px;height:34px;border-radius:50%;background:'+(statusBg[st]||'#F1F5F9')+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:'+(statusTx[st]||'#475569')+';flex-shrink:0">'+c.name.charAt(0)+'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.name+'</div>'
+          +'<div style="font-size:11px;color:var(--text2)">'+(c.ownerName&&!selectedOwnerId?c.ownerName+' · ':'')+(fuStr?'FU '+fuStr:'')+'</div>'
+        +'</div>'
+        +'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:'+(statusBg[st]||'#F1F5F9')+';color:'+(statusTx[st]||'#475569')+'">'+st+'</span>'
+        +(jobs?'<span style="font-size:10px;background:#EFF6FF;color:#1E40AF;padding:2px 6px;border-radius:10px;font-weight:600">'+jobs+' jobs</span>':'')
+        +'</div>';
+    }).join('');
   }
 };
 
