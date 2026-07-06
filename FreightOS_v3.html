@@ -7003,7 +7003,7 @@ function renderManagerPage(){
     <div id="aum-err" style="color:#DC2626;font-size:12px;margin-top:8px"></div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button onclick="document.getElementById('fb-add-user-modal').style.display='none'" style="flex:1;padding:9px;background:#F4F6F8;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
-      <button onclick="fbSaveNewUser()" style="flex:1;padding:9px;background:#D85A30;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">สร้าง Account</button>
+      <button id="aum-save-btn" onclick="fbSaveNewUser()" style="flex:1;padding:9px;background:#D85A30;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">สร้าง Account</button>
     </div>
   </div>
 </div>
@@ -8059,6 +8059,158 @@ window.mgr_showTab = function(tab) {
     btn.style.borderBottom = on?'2px solid #D85A30':'2px solid transparent';
     cnt.style.display      = on?'block':'none';
   });
+};
+
+// ═══
+// ══════════════════════════════════
+// TEAM MANAGEMENT PAGE
+// ══════════════════════════════════
+window.renderTeamPage = async function() {
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.topnav-tab').forEach(function(b){b.classList.remove('active');});
+  var pg = document.getElementById('page-team');
+  if (pg) pg.classList.add('active');
+  var bn = document.getElementById('fb-team-nav');
+  if (bn) bn.classList.add('active');
+
+  var listEl = document.getElementById('team-member-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="color:#6B7280;font-size:13px;padding:8px">กำลังโหลด...</div>';
+
+  var token = window.FB_ID_TOKEN;
+  if (!token) { listEl.innerHTML = '<div style="color:#DC2626;font-size:13px">ไม่พบ token กรุณา login ใหม่</div>'; return; }
+
+  try {
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var res = await fetch(baseUrl + '/users', { headers: { 'Authorization': 'Bearer ' + token } });
+    var data = await res.json();
+    var docs = data.documents || [];
+    if (!docs.length) {
+      listEl.innerHTML = '<div style="color:#6B7280;font-size:13px;padding:8px">ยังไม่มีสมาชิก</div>';
+      return;
+    }
+    var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">';
+    docs.forEach(function(doc) {
+      var uid = doc.name.split('/').pop();
+      var u = fsDocToObj(doc);
+      var initial = (u.displayName || u.email || '?').charAt(0).toUpperCase();
+      var roleColor = u.role === 'manager' ? '#7C3AED' : '#D85A30';
+      var roleBg    = u.role === 'manager' ? '#EDE9FE' : '#FFF7F5';
+      var roleLabel = u.role === 'manager' ? '&#128084; Manager' : '&#128188; Sale';
+      var isSelf = window.FB_USER && window.FB_USER.uid === uid;
+      html += '<div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;align-items:center;gap:14px">'
+        + '<div style="width:44px;height:44px;border-radius:50%;background:' + roleColor + '22;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:' + roleColor + ';flex-shrink:0">' + initial + '</div>'
+        + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:14px;font-weight:700;color:#1A1D23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (u.displayName || '&#8212;') + (isSelf ? ' <span style="font-size:11px;color:#6B7280">(คุณ)</span>' : '') + '</div>'
+          + '<div style="font-size:12px;color:#6B7280;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (u.email || uid) + '</div>'
+          + '<div style="margin-top:6px"><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:' + roleBg + ';color:' + roleColor + '">' + roleLabel + '</span></div>'
+        + '</div>'
+        + (!isSelf
+            ? '<button onclick="fbEditUser(\'' + uid + '\',\'' + (u.displayName||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\',\'' + (u.email||'').replace(/'/g,"\\'") + '\',\'' + (u.role||'sale') + '\')" style="background:#F4F6F8;border:0.5px solid #E5E7EB;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:#4A5568;font-family:inherit;flex-shrink:0">&#9999; แก้ไข</button>'
+            : '')
+        + '</div>';
+    });
+    html += '</div>';
+    listEl.innerHTML = html;
+  } catch(e) {
+    listEl.innerHTML = '<div style="color:#DC2626;font-size:13px;padding:8px">โหลดไม่สำเร็จ: ' + e.message + '</div>';
+  }
+};
+
+window.fbOpenAddUser = function() {
+  ['aum-name','aum-email','aum-pass'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.value=''; el.disabled=false; } });
+  var r = document.getElementById('aum-role'); if(r) r.value='sale';
+  var err = document.getElementById('aum-err'); if(err) err.textContent='';
+  var saveBtn = document.getElementById('aum-save-btn');
+  if (saveBtn) { saveBtn.textContent='สร้าง Account'; saveBtn.onclick=function(){window.fbSaveNewUser();}; }
+  window._editUserId = null;
+  var modal = document.getElementById('fb-add-user-modal');
+  if (modal) modal.style.display='flex';
+};
+
+window.fbEditUser = function(uid, name, email, role) {
+  var nameEl = document.getElementById('aum-name'); if(nameEl) nameEl.value=name;
+  var emailEl = document.getElementById('aum-email'); if(emailEl) { emailEl.value=email; emailEl.disabled=true; }
+  var passEl = document.getElementById('aum-pass'); if(passEl) { passEl.value=''; passEl.placeholder='ปล่อยว่าง = ไม่เปลี่ยนรหัส'; }
+  var roleEl = document.getElementById('aum-role'); if(roleEl) roleEl.value=role;
+  var err = document.getElementById('aum-err'); if(err) err.textContent='';
+  var saveBtn = document.getElementById('aum-save-btn');
+  if (saveBtn) { saveBtn.textContent='บันทึก'; saveBtn.onclick=function(){window.fbUpdateUser(uid);}; }
+  window._editUserId = uid;
+  var modal = document.getElementById('fb-add-user-modal');
+  if (modal) modal.style.display='flex';
+};
+
+window.fbSaveNewUser = async function() {
+  var name  = (document.getElementById('aum-name')||{}).value||'';
+  var email = (document.getElementById('aum-email')||{}).value||'';
+  var pass  = (document.getElementById('aum-pass')||{}).value||'';
+  var role  = (document.getElementById('aum-role')||{}).value||'sale';
+  var errEl = document.getElementById('aum-err');
+
+  if (!name.trim())  { if(errEl) errEl.textContent='กรุณาใส่ชื่อ'; return; }
+  if (!email.trim()) { if(errEl) errEl.textContent='กรุณาใส่ email'; return; }
+  if (pass.length < 6) { if(errEl) errEl.textContent='รหัสผ่านต้องอย่างน้อย 6 ตัว'; return; }
+  if (errEl) errEl.textContent='';
+
+  var saveBtn = document.getElementById('aum-save-btn');
+  if (saveBtn) saveBtn.textContent = 'กำลังสร้าง...';
+
+  try {
+    var FB_API_KEY = 'AIzaSyA75jlDn0aZuikPUQnryycLSpf7OVmSY3E';
+    var authRes = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FB_API_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: pass, returnSecureToken: true })
+    });
+    var authData = await authRes.json();
+    if (authData.error) { if(errEl) errEl.textContent = authData.error.message; if(saveBtn) saveBtn.textContent='สร้าง Account'; return; }
+    var newUid = authData.localId;
+
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var token = window.FB_ID_TOKEN;
+    var userDoc = { displayName: name.trim(), email: email.trim(), role: role };
+    await fetch(baseUrl + '/users/' + newUid, {
+      method: 'PATCH',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: objToFsDoc(userDoc).fields })
+    });
+
+    document.getElementById('fb-add-user-modal').style.display = 'none';
+    window.renderTeamPage();
+  } catch(e) {
+    if(errEl) errEl.textContent = 'เกิดข้อผิดพลาด: ' + e.message;
+    if(saveBtn) saveBtn.textContent = 'สร้าง Account';
+  }
+};
+
+window.fbUpdateUser = async function(uid) {
+  var name  = (document.getElementById('aum-name')||{}).value||'';
+  var role  = (document.getElementById('aum-role')||{}).value||'sale';
+  var errEl = document.getElementById('aum-err');
+  if (!name.trim()) { if(errEl) errEl.textContent='กรุณาใส่ชื่อ'; return; }
+  if (errEl) errEl.textContent='';
+  var saveBtn = document.getElementById('aum-save-btn');
+  if (saveBtn) saveBtn.textContent = 'กำลังบันทึก...';
+
+  try {
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var token = window.FB_ID_TOKEN;
+    var email = (document.getElementById('aum-email')||{}).value||'';
+    var userDoc = { displayName: name.trim(), email: email.trim(), role: role };
+    var patchRes = await fetch(baseUrl + '/users/' + uid + '?updateMask.fieldPaths=displayName&updateMask.fieldPaths=role', {
+      method: 'PATCH',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: objToFsDoc(userDoc).fields })
+    });
+    if (!patchRes.ok) throw new Error('PATCH failed ' + patchRes.status);
+    var emailEl = document.getElementById('aum-email'); if(emailEl) emailEl.disabled=false;
+    document.getElementById('fb-add-user-modal').style.display = 'none';
+    window.renderTeamPage();
+  } catch(e) {
+    if(errEl) errEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    if(saveBtn) saveBtn.textContent = 'บันทึก';
+  }
 };
 
 })();
