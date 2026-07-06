@@ -7669,8 +7669,15 @@ window.fbLogout = function() {
 (function() {
   var _orig = window.showPage;
   window.showPage = function(id) {
-    if (id === 'manager') { renderManagerDashboard(); return; }
-    if (id === 'team')    { renderTeamPage(); return; }
+    var isManager = window.FB_USERDATA && window.FB_USERDATA.role === 'manager';
+    if (id === 'manager') {
+      if (!isManager) { alert('หน้านี้สำหรับ Manager เท่านั้น'); return; }
+      renderManagerDashboard(); return;
+    }
+    if (id === 'team') {
+      if (!isManager) { alert('หน้านี้สำหรับ Manager เท่านั้น'); return; }
+      renderTeamPage(); return;
+    }
     if (typeof _orig === 'function') _orig(id);
   };
 })();
@@ -8217,6 +8224,11 @@ window.mgr_showTab = function(tab) {
 // TEAM MANAGEMENT PAGE
 // ══════════════════════════════════
 window.renderTeamPage = async function() {
+  // Guard: manager only
+  if (!window.FB_USERDATA || window.FB_USERDATA.role !== 'manager') {
+    alert('หน้านี้สำหรับ Manager เท่านั้น');
+    return;
+  }
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.topnav-tab').forEach(function(b){b.classList.remove('active');});
   var pg = document.getElementById('page-team');
