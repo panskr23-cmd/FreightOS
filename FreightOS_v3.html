@@ -666,6 +666,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <!-- Tab bar -->
     <div style="display:flex;border-bottom:0.5px solid var(--border);background:var(--surface);flex-shrink:0;padding:0 16px">
       <button onclick="setRoomTab('activity')" id="tab-btn-activity" style="padding:11px 16px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;font-family:inherit;color:var(--primary);border-bottom:2px solid var(--primary)">💬 Activity</button>
+      <button onclick="setRoomTab('pipeline')" id="tab-btn-pipeline" style="padding:11px 16px;font-size:13px;font-weight:500;border:none;background:transparent;cursor:pointer;font-family:inherit;color:var(--text3);border-bottom:2px solid transparent">🔄 Pipeline <span id="tab-pipeline-cnt" style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:10px">0</span></button>
       <button onclick="setRoomTab('jobs')"     id="tab-btn-jobs"     style="padding:11px 16px;font-size:13px;font-weight:500;border:none;background:transparent;cursor:pointer;font-family:inherit;color:var(--text3);border-bottom:2px solid transparent">📦 Jobs <span id="tab-jobs-cnt" style="font-size:10px;background:#E3F2FD;color:var(--primary);padding:1px 6px;border-radius:10px">0</span></button>
       <button onclick="setRoomTab('qo')"       id="tab-btn-qo"       style="padding:11px 16px;font-size:13px;font-weight:500;border:none;background:transparent;cursor:pointer;font-family:inherit;color:var(--text3);border-bottom:2px solid transparent">📄 QO <span id="tab-qo-cnt" style="font-size:10px;background:#E3F2FD;color:var(--primary);padding:1px 6px;border-radius:10px">0</span></button>
       <div style="flex:1"></div>
@@ -717,6 +718,45 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <!-- Activity log -->
       <div id="room-act-log" style="display:flex;flex-direction:column;gap:6px"></div>
     </div>
+
+    <!-- ── TAB: PIPELINE ── -->
+    <div id="room-tab-pipeline" style="flex:1;overflow-y:auto;padding:14px 16px;display:none;flex-direction:column">
+      <!-- pipeline strip -->
+      <div style="display:flex;align-items:center;gap:4px;background:var(--bg2);border-radius:8px;padding:8px 12px;margin-bottom:14px;overflow-x:auto;flex-shrink:0">
+        <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#EDE9FE;color:#5B21B6;font-weight:500;white-space:nowrap">🔍 Inquiry</span>
+        <span style="color:var(--text3);font-size:12px">→</span>
+        <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#E3F2FD;color:#1565C0;font-weight:500;white-space:nowrap">📄 QO</span>
+        <span style="color:var(--text3);font-size:12px">→</span>
+        <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#FFF3DC;color:#B45309;font-weight:500;white-space:nowrap">📦 Booking</span>
+        <span style="color:var(--text3);font-size:12px">→</span>
+        <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#daf0ea;color:#085041;font-weight:500;white-space:nowrap">🚢 Shipped</span>
+        <span style="color:var(--text3);font-size:12px">→</span>
+        <span style="font-size:11px;padding:3px 10px;border-radius:20px;background:#f0f0f0;color:#555;font-weight:500;white-space:nowrap">✓ Done</span>
+        <button onclick="openAddInquiry()" style="margin-left:auto;padding:4px 12px;background:var(--primary);color:#fff;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">+ Inquiry ใหม่</button>
+      </div>
+      <div id="pipeline-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
+    <!-- PIPELINE: Add Inquiry Modal -->
+    <div id="inq-add-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9100;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:14px;padding:24px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+        <div style="font-size:15px;font-weight:700;margin-bottom:16px">🔍 เพิ่ม Inquiry ใหม่</div>
+        <div style="display:grid;gap:10px">
+          <div><label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">เส้นทาง / Route *</label><input id="inq-route" class="fb-login-input" placeholder="เช่น LCB → TOKYO, OSAKA" style="margin:0"></div>
+          <div><label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">ประเภทตู้ / สินค้า</label><input id="inq-goods" class="fb-login-input" placeholder="เช่น 40HQ × 2, Auto Parts" style="margin:0"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div><label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">ETD (ประมาณ)</label><input id="inq-etd" type="date" class="fb-login-input" style="margin:0"></div>
+            <div><label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Mode</label><select id="inq-mode" class="fb-login-input" style="margin:0"><option value="sea">🚢 Sea</option><option value="air">✈️ Air</option><option value="cb">🚛 Cross Border</option></select></div>
+          </div>
+          <div><label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Note</label><input id="inq-note" class="fb-login-input" placeholder="รายละเอียดเพิ่มเติม..." style="margin:0"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button onclick="document.getElementById('inq-add-modal').style.display='none'" style="flex:1;padding:9px;background:#F4F6F8;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">ยกเลิก</button>
+          <button onclick="saveInquiry()" style="flex:1;padding:9px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">💾 บันทึก</button>
+        </div>
+      </div>
+    </div>
+
 
     <!-- ── TAB: JOBS ── -->
     <div id="room-tab-jobs" style="flex:1;overflow-y:auto;display:none">
@@ -1879,13 +1919,125 @@ function deleteJob(idx){
   c.jobs.splice(idx,1); saveToStorage(); renderJobsList(c); renderCustomers();
 }
 
+// ===== PIPELINE (Inquiry → QO → Booking → Shipped) =====
+var _pipelineStages = {
+  inquiry: {label:'🔍 Inquiry', bg:'#EDE9FE', color:'#5B21B6'},
+  qo:      {label:'📄 QO ส่งแล้ว', bg:'#E3F2FD', color:'#1565C0'},
+  booked:  {label:'📦 Booking', bg:'#FFF3DC', color:'#B45309'},
+  shipped: {label:'🚢 Shipped', bg:'#daf0ea', color:'#085041'},
+  done:    {label:'✓ Done', bg:'#f0f0f0', color:'#555'}
+};
+
+function renderPipelineTab() {
+  var c = CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  c.pipeline_items = c.pipeline_items||[];
+  var list = document.getElementById('pipeline-list'); if(!list) return;
+  var cnt = document.getElementById('tab-pipeline-cnt');
+  if(cnt) cnt.textContent = c.pipeline_items.length;
+  if(!c.pipeline_items.length){
+    list.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px">ยังไม่มี Inquiry — กด "+ Inquiry ใหม่" เพื่อเริ่ม</div>';
+    return;
+  }
+  list.innerHTML = c.pipeline_items.map(function(it,i){
+    var st = _pipelineStages[it.stage]||_pipelineStages.inquiry;
+    var modeIcon = {sea:'🚢',air:'✈️',cb:'🚛'}[it.mode||'sea']||'🚢';
+    var actions='';
+    if(it.stage==='inquiry'){
+      actions='<button onclick="inqConvertToQO('+i+')" style="padding:4px 10px;border-radius:6px;border:0.5px solid #B5D4F4;background:#E6F1FB;color:#185FA5;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">📄 สร้าง QO</button>';
+    } else if(it.stage==='qo'){
+      actions='<button onclick="inqConvertToBooked('+i+')" style="padding:4px 10px;border-radius:6px;border:0.5px solid #C0DD97;background:#EAF3DE;color:#3B6D11;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">✓ ลูกค้าตอบรับ</button>';
+    } else if(it.stage==='booked'){
+      actions='<button onclick="inqConvertToShipped('+i+')" style="padding:4px 10px;border-radius:6px;border:0.5px solid #5DCAA5;background:#daf0ea;color:#085041;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">🚢 Shipped</button>';
+    } else if(it.stage==='shipped'){
+      actions='<button onclick="inqConvertToDone('+i+')" style="padding:4px 10px;border-radius:6px;border:0.5px solid #ccc;background:#f0f0f0;color:#555;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">✓ Done</button>';
+    }
+    var details='';
+    if(it.qoNo) details+='<span style="font-size:11px;color:var(--text3)">'+it.qoNo+'</span>&nbsp;';
+    if(it.carrier) details+='<span style="font-size:11px;color:var(--text3)">'+it.carrier+'</span>&nbsp;';
+    if(it.booking) details+='<span style="font-size:11px;color:var(--text3);font-family:monospace">'+it.booking+'</span>';
+    return '<div style="background:#fff;border:0.5px solid var(--border);border-radius:10px;overflow:hidden">'
+      +'<div style="display:flex;align-items:center;gap:10px;padding:11px 14px">'
+        +'<div style="width:34px;height:34px;border-radius:8px;background:'+st.bg+';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">'+modeIcon+'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.route+'</div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(it.goods||'')+(it.etd?' · ETD '+it.etd:'')+'</div>'
+          +(details?'<div style="margin-top:3px">'+details+'</div>':'')
+          +(it.note?'<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">'+it.note+'</div>':'')
+        +'</div>'
+        +'<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">'
+          +'<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:'+st.bg+';color:'+st.color+'">'+st.label+'</span>'
+          +actions
+          +'<button onclick="inqDelete('+i+')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:18px;padding:0;line-height:1;width:22px;height:22px">&#215;</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+function openAddInquiry(){
+  ['inq-route','inq-goods','inq-note'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  var etd=document.getElementById('inq-etd');if(etd)etd.value='';
+  var mode=document.getElementById('inq-mode');if(mode)mode.value='sea';
+  document.getElementById('inq-add-modal').style.display='flex';
+}
+
+function saveInquiry(){
+  var route=(document.getElementById('inq-route')||{}).value||'';
+  if(!route.trim()){alert('ใส่เส้นทางด้วยครับ');return;}
+  var c=CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  if(!c.pipeline_items) c.pipeline_items=[];
+  c.pipeline_items.unshift({id:Date.now(),stage:'inquiry',route:route.trim(),goods:(document.getElementById('inq-goods')||{}).value||'',etd:(document.getElementById('inq-etd')||{}).value||'',mode:(document.getElementById('inq-mode')||{}).value||'sea',note:(document.getElementById('inq-note')||{}).value||'',ts:Date.now()});
+  document.getElementById('inq-add-modal').style.display='none';
+  saveToStorage(); renderPipelineTab();
+}
+
+function inqConvertToQO(i){
+  var c=CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  var it=c.pipeline_items[i]; if(!it) return;
+  it.stage='qo';
+  var n=String(Date.now()%10000).padStart(4,'0');
+  it.qoNo='QO-'+n;
+  it.note=it.qoNo+' ส่งแล้ว — รอลูกค้าตอบรับ';
+  saveToStorage(); renderPipelineTab();
+}
+
+function inqConvertToBooked(i){
+  var c=CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  var it=c.pipeline_items[i]; if(!it) return;
+  var carrier=prompt('Carrier / สายเรือ (เช่น MSC, COSCO):','');
+  var booking=prompt('เลข Booking:','');
+  it.stage='booked'; it.carrier=carrier||''; it.booking=booking||''; it.note='Booking confirmed';
+  saveToStorage(); renderPipelineTab();
+}
+
+function inqConvertToShipped(i){
+  var c=CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  var it=c.pipeline_items[i]; if(!it) return;
+  it.stage='shipped'; it.shippedAt=Date.now();
+  saveToStorage(); renderPipelineTab();
+}
+
+function inqConvertToDone(i){
+  var c=CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  var it=c.pipeline_items[i]; if(!it) return;
+  it.stage='done'; it.doneAt=Date.now();
+  saveToStorage(); renderPipelineTab();
+}
+
+function inqDelete(i){
+  if(!confirm('ลบรายการนี้?')) return;
+  var c=CUSTOMERS.find(function(x){return x.id===currentRoomId;}); if(!c) return;
+  c.pipeline_items.splice(i,1);
+  saveToStorage(); renderPipelineTab();
+}
+
 // ===== COMPANY ROOM =====
 var currentRoomId=null;
 
 // ===== QUOTATION =====
 
 function setRoomTab(tab) {
-  var tabs = ["activity","jobs","qo"];
+  var tabs = ["activity","pipeline","jobs","qo"];
   tabs.forEach(function(t){
     var panel = document.getElementById("room-tab-"+t);
     var btn   = document.getElementById("tab-btn-"+t);
@@ -1897,11 +2049,10 @@ function setRoomTab(tab) {
       btn.style.fontWeight      = isA ? "600" : "500";
     }
   });
-  // show/hide + เพิ่มงาน button only on jobs tab
   var addBtn = document.getElementById("tab-add-job-btn");
   if(addBtn) addBtn.style.display = (tab==="jobs") ? "" : "none";
-  // render QO list when switching to qo tab
   if(tab==="qo") renderRoomQOList();
+  if(tab==="pipeline") renderPipelineTab();
 }
 
 function openRoom(custId) {
