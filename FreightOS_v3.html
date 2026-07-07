@@ -8674,6 +8674,7 @@ window.renderManagerSaleDashboard = function(selectedOwnerId) {
         +'<th style="text-align:left;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Mode</th>'
         +'<th style="text-align:center;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Jobs</th>'
         +'<th style="text-align:left;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Follow-Up</th>'
+        +'<th style="width:36px;border-bottom:2px solid #F3F4F6"></th>'
         +'</tr></thead><tbody>'
         +sorted.map(function(c) {
           var st = c.status||'NEW';
@@ -8690,9 +8691,39 @@ window.renderManagerSaleDashboard = function(selectedOwnerId) {
             +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;font-size:11px;color:#6B7280">'+(c.mode||'-')+'</td>'
             +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;text-align:center;font-size:12px;color:#6B7280">'+(aJobs||'-')+'</td>'
             +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;font-size:11px;color:'+fuColor+';font-weight:'+fuWeight+'">'+(fuOd?'⚠️ ':fuTd?'📅 ':'')+fmtDate(c.followUp)+'</td>'
+          +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;text-align:center">'
+            +'<button onclick="mgrDeleteCustomer(''+c.fsId+'',''+c.company.replace(/'/g,'\'')+'')" '
+            +'style="background:none;border:none;cursor:pointer;font-size:14px;color:#CBD5E1;padding:2px 4px;border-radius:4px;line-height:1" '
+            +'onmouseover="this.style.color='#DC2626'" onmouseout="this.style.color='#CBD5E1'" '
+            +'title="ลบลูกค้า">🗑</button>'
+          +'</td>'
           +'</tr>';
         }).join('')+'</tbody></table>';
     }
+  }
+};
+
+window.mgrDeleteCustomer = async function(fsId, company) {
+  if (!fsId) { alert('ไม่พบ ID ของลูกค้า'); return; }
+  if (!confirm('ลบลูกค้า "' + company + '" ออกจากระบบถาวร?\n\nข้อมูล Activity, Jobs, QO จะหายทั้งหมด')) return;
+  var token = window.FB_ID_TOKEN;
+  if (!token) { alert('กรุณาเข้าสู่ระบบก่อน'); return; }
+  try {
+    var baseUrl = 'https://firestore.googleapis.com/v1/projects/freightos-7d4c4/databases/(default)/documents';
+    var res = await fetch(baseUrl + '/customers/' + fsId, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok && res.status !== 404) throw new Error('DELETE failed ' + res.status);
+    // Remove from in-memory CUSTOMERS
+    if (window.CUSTOMERS) {
+      window.CUSTOMERS = window.CUSTOMERS.filter(function(c){ return c.fsId !== fsId; });
+    }
+    // Re-render current view
+    var pickerVal = (document.getElementById('mgr-sale-picker')||{}).value||'';
+    renderManagerSaleDashboard(pickerVal);
+  } catch(e) {
+    alert('ลบไม่สำเร็จ: ' + e.message);
   }
 };
 
