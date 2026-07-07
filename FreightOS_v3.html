@@ -7081,7 +7081,7 @@ function renderManagerPage(){
 <div id="page-manager" class="page">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
     <h1 class="page-title" style="font-size:20px;font-weight:800;margin:0">&#128202; ภาพรวมทีม</h1>
-    <button onclick="renderManagerDashboard()" style="background:#F4F6F8;border:1px solid #E5E7EB;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit;color:#6B7280">&#8635; รีเฟรช</button>
+    <button id="mgr-sync-btn" onclick="mgrSyncAndRefresh('manager')" style="background:#D85A30;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#8635; ซิงค์ข้อมูล</button>
   </div>
   <!-- KPI Team Totals -->
   <div id="mgr-kpi" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:22px"></div>
@@ -7167,8 +7167,10 @@ function renderManagerPage(){
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
       <h1 style="font-size:20px;font-weight:800;margin:0;color:var(--text)">&#128203; Dashboard ลูกค้า</h1>
       <select id="mgr-sale-picker" onchange="renderManagerSaleDashboard(this.value)" style="padding:7px 12px;border:1px solid var(--border2);border-radius:8px;font-size:13px;font-family:inherit;color:var(--text);background:var(--bg);cursor:pointer">
-        <option value="">-- เลือก Sale --</option>
+        <option value="">-- ทีมทั้งหมด --</option>
       </select>
+      <div id="mgr-no-owner-warn" onclick="renderManagerSaleDashboard('__noowner__')" style="display:none;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">⚠️ ลูกค้าไม่ระบุ Sale</div>
+      <div style="margin-left:auto"><button id="mgr-dash-sync-btn" onclick="mgrSyncAndRefresh('mgr-dash')" style="background:#D85A30;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#8635; ซิงค์</button></div>
     </div>
     <div id="mgr-cust-kpi" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
@@ -8509,6 +8511,215 @@ var listEl = document.getElementById('mgr-cust-list');
         +(jobs?'<span style="font-size:10px;background:#EFF6FF;color:#1E40AF;padding:2px 6px;border-radius:10px;font-weight:600">'+jobs+' jobs</span>':'')
         +'</div>';
     }).join('');
+  }
+};
+
+
+// ═══════════════════════════════════════════════════════════
+// MANAGER SALE DASHBOARD
+// ═══════════════════════════════════════════════════════════
+window.renderManagerSaleDashboard = function(selectedOwnerId) {
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.topnav-tab').forEach(function(b){b.classList.remove('active');});
+  var pg = document.getElementById('page-mgr-cust');
+  if (pg) pg.classList.add('active');
+  var bn = document.getElementById('fb-mgr-dash-nav');
+  if (bn) bn.classList.add('active');
+
+  var allC = window.CUSTOMERS || [];
+
+  var picker = document.getElementById('mgr-sale-picker');
+  if (picker) {
+    var saleMap = {};
+    allC.forEach(function(c) {
+      var uid = c.ownerId || '';
+      var name = c.ownerName || (window.FB_USERS_MAP&&window.FB_USERS_MAP[uid]) || uid || 'ไม่ระบุ';
+      if (uid && !saleMap[uid]) saleMap[uid] = name;
+    });
+    var opts = '<option value="">-- ทีมทั้งหมด --</option>';
+    Object.keys(saleMap).sort(function(a,b){ return (saleMap[a]||'').localeCompare(saleMap[b]||'','th'); }).forEach(function(uid) {
+      var sel = selectedOwnerId === uid ? ' selected' : '';
+      opts += '<option value="'+uid+'"'+sel+'>'+saleMap[uid]+'</option>';
+    });
+    var noOwnerCnt = allC.filter(function(c){return !c.ownerId;}).length;
+    if (noOwnerCnt > 0) {
+      var sel2 = selectedOwnerId === '__noowner__' ? ' selected' : '';
+      opts += '<option value="__noowner__"'+sel2+'>⚠️ ไม่ระบุ Sale ('+noOwnerCnt+')</option>';
+    }
+    picker.innerHTML = opts;
+    if (selectedOwnerId) picker.value = selectedOwnerId;
+  }
+
+  var noOwnerTotal = allC.filter(function(c){return !c.ownerId;}).length;
+  var warnEl = document.getElementById('mgr-no-owner-warn');
+  if (warnEl) {
+    warnEl.style.display = noOwnerTotal > 0 ? '' : 'none';
+    warnEl.textContent = '⚠️ '+noOwnerTotal+' ลูกค้าไม่ระบุ Sale';
+  }
+
+  var viewC;
+  if (!selectedOwnerId) {
+    viewC = allC;
+  } else if (selectedOwnerId === '__noowner__') {
+    viewC = allC.filter(function(c){return !c.ownerId;});
+  } else {
+    viewC = allC.filter(function(c){return c.ownerId === selectedOwnerId;});
+  }
+
+  var now = Date.now();
+  var todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  var todayTs = todayStart.getTime();
+  var tomorrowTs = todayTs + 86400000;
+  function fmtDate(ts) {
+    if (!ts) return '-';
+    var d = new Date(ts);
+    return d.getDate()+'/'+(d.getMonth()+1)+'/'+(d.getFullYear()%100);
+  }
+
+  var hotCount = viewC.filter(function(c){return c.status==='HOT';}).length;
+  var fuOverdue = viewC.filter(function(c){return c.followUp && c.followUp < todayTs;});
+  var fuToday2  = viewC.filter(function(c){return c.followUp && c.followUp >= todayTs && c.followUp < tomorrowTs;});
+  var activeJobs = [];
+  viewC.forEach(function(c){
+    (c.jobs||[]).forEach(function(j){
+      if(j.stage!=='DELIVERED'&&j.stage!=='CANCELLED') activeJobs.push({j:j,c:c});
+    });
+  });
+  var totalQos = 0, totalSell = 0;
+  viewC.forEach(function(c){ (c.qoHistory||[]).forEach(function(q){ totalQos++; totalSell+=(q.totalSell||0); }); });
+
+  function mkpiCard(icon, label, val, bg, tc, sub) {
+    var dark = bg && bg !== '#fff' && bg !== '#F8FAFC';
+    return '<div style="background:'+(bg||'#fff')+';border-radius:12px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,.07)">'
+      +'<div style="font-size:18px;margin-bottom:5px">'+icon+'</div>'
+      +'<div style="font-size:10px;color:'+(dark?'rgba(255,255,255,.75)':'#9AA5B4')+';margin-bottom:2px;letter-spacing:.3px">'+label+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+(tc||(dark?'#fff':'#1A1D23'))+'">'+val+'</div>'
+      +(sub?'<div style="font-size:10px;color:'+(dark?'rgba(255,255,255,.7)':'#9AA5B4')+';margin-top:2px">'+sub+'</div>':'')
+    +'</div>';
+  }
+
+  var kpiEl = document.getElementById('mgr-cust-kpi');
+  if (kpiEl) {
+    var fuBg = fuOverdue.length ? '#FEF2F2' : '#fff';
+    var fuTc = fuOverdue.length ? '#DC2626' : '#1A1D23';
+    kpiEl.innerHTML =
+      mkpiCard('👤','ลูกค้าทั้งหมด', viewC.length, '#fff', '', 'HOT '+hotCount+' คน') +
+      mkpiCard('🔥','HOT', hotCount, '#D85A30', '#fff', viewC.length?Math.round(hotCount/viewC.length*100)+'% ของทั้งหมด':'-') +
+      mkpiCard('⏰','Follow-Up', fuOverdue.length+fuToday2.length, fuBg, fuTc,
+        fuOverdue.length ? 'เลย! '+fuOverdue.length+' คน' : 'วันนี้ '+fuToday2.length+' คน') +
+      mkpiCard('📦','Active Jobs', activeJobs.length, '#EFF6FF', '#0369A1', totalQos+' QO รวม') +
+      mkpiCard('💰','ยอดขาย (QO)', totalSell?'$'+Math.round(totalSell).toLocaleString():'-', '#F0FDF4', '#059669', totalQos+' ใบ');
+  }
+
+  var fuEl = document.getElementById('mgr-cust-fu');
+  if (fuEl) {
+    var allFu = fuOverdue.concat(fuToday2).sort(function(a,b){return (a.followUp||0)-(b.followUp||0);});
+    if (!allFu.length) {
+      fuEl.innerHTML = '<div style="color:#9AA5B4;font-size:12px;padding:6px">✅ ไม่มี Follow-Up วันนี้</div>';
+    } else {
+      fuEl.innerHTML = allFu.map(function(c) {
+        var overdue = c.followUp < todayTs;
+        var ownerName = c.ownerName||(window.FB_USERS_MAP&&window.FB_USERS_MAP[c.ownerId])||'-';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:'+(overdue?'#FEF2F2':'#FFF7ED')+';border-radius:8px;border-left:3px solid '+(overdue?'#DC2626':'#D97706')+';margin-bottom:4px">'
+          +'<div style="flex:1;min-width:0">'
+            +'<div style="font-size:12px;font-weight:600;color:#1A1D23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.company+'</div>'
+            +(!selectedOwnerId?'<div style="font-size:10px;color:#9AA5B4">'+ownerName+'</div>':'')
+          +'</div>'
+          +'<div style="font-size:10px;font-weight:700;color:'+(overdue?'#DC2626':'#D97706')+';flex-shrink:0;white-space:nowrap">'+(overdue?'⚠️ เลย! ':'📅 ')+fmtDate(c.followUp)+'</div>'
+        +'</div>';
+      }).join('');
+    }
+  }
+
+  var stageLabel = {INQUIRY:'ค้นหา',QUOTED:'ส่งราคา',NEGOTIATION:'ต่อรอง',BOOKED:'จอง',SHIPPED:'ขนส่ง',DELIVERED:'ส่งแล้ว',CANCELLED:'ยกเลิก'};
+  var stageColor = {INQUIRY:'#94A3B8',QUOTED:'#1976D2',NEGOTIATION:'#D97706',BOOKED:'#7C3AED',SHIPPED:'#0369A1',DELIVERED:'#059669',CANCELLED:'#DC2626'};
+  var jobsEl = document.getElementById('mgr-cust-jobs');
+  if (jobsEl) {
+    if (!activeJobs.length) {
+      jobsEl.innerHTML = '<div style="color:#9AA5B4;font-size:12px;padding:6px">ไม่มีงานที่กำลังดำเนินการ</div>';
+    } else {
+      jobsEl.innerHTML = activeJobs.slice(0,12).map(function(x) {
+        var j=x.j, c=x.c, stg=j.stage||'INQUIRY';
+        var ownerName = c.ownerName||(window.FB_USERS_MAP&&window.FB_USERS_MAP[c.ownerId])||'-';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#F8F9FA;border-radius:8px;margin-bottom:4px">'
+          +'<span style="background:'+(stageColor[stg]||'#94A3B8')+';color:#fff;border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700;flex-shrink:0">'+(stageLabel[stg]||stg)+'</span>'
+          +'<div style="flex:1;min-width:0">'
+            +'<div style="font-size:12px;font-weight:600;color:#1A1D23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(j.pol||c.company)+' → '+(j.pod||'?')+'</div>'
+            +'<div style="font-size:10px;color:#9AA5B4">'+(j.mode||c.mode||'-')+(!selectedOwnerId?' · '+ownerName:'')+'</div>'
+          +'</div>'
+          +(j.estRev?'<div style="font-size:11px;font-weight:700;color:#0369A1;flex-shrink:0">$'+Math.round(j.estRev).toLocaleString()+'</div>':'')
+        +'</div>';
+      }).join('')
+      +(activeJobs.length>12?'<div style="font-size:11px;color:#9AA5B4;padding:6px;text-align:center">... อีก '+(activeJobs.length-12)+' งาน</div>':'');
+    }
+  }
+
+  var statusBg  = {HOT:'#FEF2F2',WARM:'#FFF7ED',COLD:'#EFF6FF',NEW:'#F8F9FA'};
+  var statusCol = {HOT:'#DC2626',WARM:'#D97706',COLD:'#0369A1',NEW:'#6B7280'};
+  var listEl = document.getElementById('mgr-cust-list');
+  if (listEl) {
+    if (!viewC.length) {
+      listEl.innerHTML = '<div style="color:#9AA5B4;font-size:13px;padding:10px">ยังไม่มีลูกค้าในกลุ่มนี้</div>';
+    } else {
+      var showOwner = !selectedOwnerId || selectedOwnerId === '__noowner__';
+      var sorted = viewC.slice().sort(function(a,b){
+        var ord = {HOT:0,WARM:1,COLD:2,NEW:3};
+        return (ord[a.status]||3)-(ord[b.status]||3);
+      });
+      listEl.innerHTML = '<table style="width:100%;border-collapse:collapse">'
+        +'<thead><tr>'
+        +'<th style="text-align:left;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">บริษัท</th>'
+        +(showOwner?'<th style="text-align:left;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Sale</th>':'')
+        +'<th style="text-align:center;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Status</th>'
+        +'<th style="text-align:left;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Mode</th>'
+        +'<th style="text-align:center;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Jobs</th>'
+        +'<th style="text-align:left;font-size:10px;color:#9AA5B4;padding:8px 10px;border-bottom:2px solid #F3F4F6;font-weight:600">Follow-Up</th>'
+        +'</tr></thead><tbody>'
+        +sorted.map(function(c) {
+          var st = c.status||'NEW';
+          var ownerName = c.ownerName||(window.FB_USERS_MAP&&window.FB_USERS_MAP[c.ownerId])||'-';
+          var aJobs = (c.jobs||[]).filter(function(j){return j.stage!=='DELIVERED'&&j.stage!=='CANCELLED';}).length;
+          var fuOd = c.followUp && c.followUp < todayTs;
+          var fuTd = c.followUp && c.followUp >= todayTs && c.followUp < tomorrowTs;
+          var fuColor = fuOd?'#DC2626':fuTd?'#D97706':'#9AA5B4';
+          var fuWeight = (fuOd||fuTd)?'700':'400';
+          return '<tr>'
+            +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;font-size:12px;font-weight:600;color:#1A1D23">'+c.company+'</td>'
+            +(showOwner?'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;font-size:11px;color:#D85A30;font-weight:600">'+ownerName+'</td>':'')
+            +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;text-align:center"><span style="background:'+(statusBg[st]||'#F8F9FA')+';color:'+(statusCol[st]||'#6B7280')+';border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700">'+st+'</span></td>'
+            +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;font-size:11px;color:#6B7280">'+(c.mode||'-')+'</td>'
+            +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;text-align:center;font-size:12px;color:#6B7280">'+(aJobs||'-')+'</td>'
+            +'<td style="padding:9px 10px;border-bottom:1px solid #F8F9FA;font-size:11px;color:'+fuColor+';font-weight:'+fuWeight+'">'+(fuOd?'⚠️ ':fuTd?'📅 ':'')+fmtDate(c.followUp)+'</td>'
+          +'</tr>';
+        }).join('')+'</tbody></table>';
+    }
+  }
+};
+
+window.mgrSyncAndRefresh = async function(page) {
+  var btnId = page==='mgr-dash' ? 'mgr-dash-sync-btn' : 'mgr-sync-btn';
+  var btn = document.getElementById(btnId);
+  var origText = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '⏳ ซิงค์...'; btn.disabled = true; }
+  try {
+    var token = window.FB_ID_TOKEN;
+    var uid = window.FB_USER && window.FB_USER.uid;
+    if (!token || !uid) { alert('กรุณาเข้าสู่ระบบก่อน'); return; }
+    if (typeof loadFromFirestoreREST === 'function') await loadFromFirestoreREST(token, uid);
+  } catch(e) {
+    console.warn('Sync error:', e);
+  } finally {
+    if (btn) {
+      btn.textContent = '✅ ซิงค์แล้ว';
+      btn.disabled = false;
+      setTimeout(function(){ if(btn) btn.textContent = origText||'↺ ซิงค์ข้อมูล'; }, 2000);
+    }
+  }
+  if (page === 'mgr-dash') {
+    var pickerVal = (document.getElementById('mgr-sale-picker')||{}).value||'';
+    renderManagerSaleDashboard(pickerVal);
+  } else {
+    renderManagerDashboard();
   }
 };
 
